@@ -3,25 +3,26 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Apple Style Taxi Meter Pro</title>
+    <title>Taxi Pro: Flexible Rates</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <style>
-        :root { --apple-blue: #007AFF; --apple-bg: #F2F2F7; }
+        :root { --apple-blue: #007AFF; --apple-bg: #F2F2F7; --apple-green: #34C759; --apple-red: #FF3B30; }
         body { font-family: -apple-system, sans-serif; margin: 0; background: var(--apple-bg); display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
         #map { flex: 1; width: 100%; z-index: 1; }
-        .panel { position: relative; z-index: 10; background: rgba(255,255,255,0.9); backdrop-filter: blur(20px); border-top-left-radius: 20px; border-top-right-radius: 20px; padding: 15px; box-shadow: 0 -5px 15px rgba(0,0,0,0.05); max-height: 60vh; overflow-y: auto; }
+        .panel { position: relative; z-index: 10; background: rgba(255,255,255,0.95); backdrop-filter: blur(20px); border-top-left-radius: 20px; border-top-right-radius: 20px; padding: 15px; box-shadow: 0 -5px 15px rgba(0,0,0,0.05); max-height: 60vh; overflow-y: auto; }
         .meter-box { background: white; padding: 15px; border-radius: 15px; text-align: center; margin-bottom: 10px; border: 1px solid rgba(0,0,0,0.05); }
         .meter-amount { font-size: 40px; font-weight: 700; color: #000; }
-        .btn { width: 100%; padding: 14px; border: none; border-radius: 12px; font-weight: 600; font-size: 16px; cursor: pointer; margin-top: 10px; transition: 0.2s; }
+        .btn { width: 100%; padding: 14px; border: none; border-radius: 12px; font-weight: 600; font-size: 16px; cursor: pointer; margin-top: 10px; }
         .btn-start { background: var(--apple-blue); color: white; }
-        .btn-stop { background: #FF3B30; color: white; display: none; }
-        .history-card { background: white; padding: 10px; border-radius: 10px; margin-top: 10px; font-size: 13px; }
-        .history-item { border-bottom: 1px solid #eee; padding: 8px 0; display: flex; justify-content: space-between; }
-        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+        .btn-stop { background: var(--apple-red); color: white; display: none; }
+        h2 { font-size: 16px; font-weight: 600; margin: 15px 0 10px; color: #000; border-left: 4px solid var(--apple-blue); padding-left: 8px; }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
         .input-group { background: #E9E9EB; padding: 8px; border-radius: 8px; }
         .input-group label { display: block; font-size: 10px; color: #8E8E93; }
         input { width: 100%; border: none; background: transparent; font-size: 14px; font-weight: 500; outline: none; }
+        .history-item { background: white; padding: 12px; border-radius: 12px; margin-bottom: 10px; border: 1px solid #eee; }
+        .history-btn { display: inline-block; margin-top: 8px; color: var(--apple-blue); font-weight: 600; font-size: 13px; text-decoration: none; border: 1px solid var(--apple-blue); padding: 5px 10px; border-radius: 8px; }
     </style>
 </head>
 <body>
@@ -31,58 +32,63 @@
 <div class="panel">
     <div class="meter-box">
         <div class="meter-amount" id="dispTotal">$80</div>
-        <div style="font-size: 12px; color: #8E8E93;">距離 <span id="dispDist" style="color:#000">0.00</span> km | 時間 <span id="dispTime" style="color:#000">0</span> min</div>
+        <div style="font-size: 12px; color: #8E8E93;">里程 <span id="dispDist">0.00</span> km | 時間 <span id="dispTime">0</span> min</div>
         <button class="btn btn-start" id="startBtn" onclick="toggleGPS(true)">🚕 開始載客</button>
         <button class="btn btn-stop" id="stopBtn" onclick="toggleGPS(false)">🏁 到達目的地</button>
     </div>
 
-    <h2>⚙️ 費率設定</h2>
+    <h2>⚙️ 專業費率自定義</h2>
     <div class="grid">
         <div class="input-group"><label>起跳價</label><input type="number" id="cfgBase" value="80"></div>
-        <div class="input-group"><label>每分鐘</label><input type="number" id="cfgMin" value="3"></div>
+        <div class="input-group"><label>每分鐘時間費</label><input type="number" id="cfgMin" value="3"></div>
+        <div class="input-group" style="grid-column: span 2; background: #FFF9C4;"><label>加價里程切換點 (km)</label><input type="number" id="cfgThreshold" value="15"></div>
+        <div class="input-group"><label>切換點前 /km</label><input type="number" id="cfgRate1" value="15"></div>
+        <div class="input-group"><label>切換點後 /km</label><input type="number" id="cfgRate2" value="25"></div>
     </div>
 
-    <h2>📜 歷史紀錄</h2>
-    <div class="history-card" id="historyList">
-        <div style="color:#999; text-align:center;">尚無載客紀錄</div>
-    </div>
+    <h2>📜 行程歷史</h2>
+    <div id="historyList"></div>
 </div>
 
 <script>
     var map = L.map('map', { zoomControl: false }).setView([25.03, 121.56], 15);
     L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png').addTo(map);
-    var path = L.polyline([], {color: '#007AFF', weight: 6}).addTo(map);
-    var marker = L.circleMarker([25.03, 121.56], {radius: 8, color: 'white', fillColor: '#007AFF', fillOpacity: 1, weight: 3}).addTo(map);
+    var livePath = L.polyline([], {color: '#007AFF', weight: 6}).addTo(map);
+    var liveMarker = L.circleMarker([25.03, 121.56], {radius: 8, color: 'white', fillColor: '#007AFF', fillOpacity: 1, weight: 3}).addTo(map);
+    var historyLayer = L.layerGroup().addTo(map);
 
-    var watchId = null, totalDist = 0, lastPos = null, startTime = null, wakeLock = null;
+    var watchId = null, totalDist = 0, lastPos = null, startTime = null, wakeLock = null, startPos = null;
 
-    // 載入舊紀錄
     window.onload = function() { displayHistory(); };
-
-    // 禁止螢幕休眠的魔法
-    async function requestWakeLock() {
-        try {
-            if ('wakeLock' in navigator) {
-                wakeLock = await navigator.wakeLock.request('screen');
-            }
-        } catch (err) { console.log("螢幕防休眠失效"); }
-    }
 
     function getFare(d, t) {
         let base = parseFloat(document.getElementById('cfgBase').value);
-        let minRate = parseFloat(document.getElementById('cfgMin').value);
-        return Math.round(base + (d * 15) + (t * minRate));
+        let tr = parseFloat(document.getElementById('cfgMin').value);
+        let threshold = parseFloat(document.getElementById('cfgThreshold').value);
+        let r1 = parseFloat(document.getElementById('cfgRate1').value);
+        let r2 = parseFloat(document.getElementById('cfgRate2').value);
+        
+        let distFee = 0;
+        if (d <= threshold) {
+            distFee = d * r1;
+        } else {
+            // 前段用費率 1，後段用費率 2
+            distFee = (threshold * r1) + (d - threshold) * r2;
+        }
+        return Math.round(base + distFee + (t * tr));
     }
 
     function toggleGPS(start) {
         if (start) {
-            requestWakeLock(); // 啟動時不讓螢幕關掉
-            totalDist = 0; startTime = new Date(); lastPos = null; path.setLatLngs([]);
+            if ('wakeLock' in navigator) navigator.wakeLock.request('screen').then(l => wakeLock = l);
+            totalDist = 0; startTime = new Date(); lastPos = null; livePath.setLatLngs([]);
+            historyLayer.clearLayers();
             document.getElementById('startBtn').style.display = 'none';
             document.getElementById('stopBtn').style.display = 'block';
+            navigator.geolocation.getCurrentPosition(p => { startPos = [p.coords.latitude, p.coords.longitude]; });
             watchId = navigator.geolocation.watchPosition(pos => {
                 let cur = [pos.coords.latitude, pos.coords.longitude];
-                map.setView(cur, 17); marker.setLatLng(cur); path.addLatLng(cur);
+                map.setView(cur, 17); liveMarker.setLatLng(cur); livePath.addLatLng(cur);
                 if (lastPos) totalDist += map.distance(lastPos, cur) / 1000;
                 lastPos = cur;
                 let min = Math.floor((new Date() - startTime) / 60000);
@@ -91,38 +97,43 @@
                 document.getElementById('dispTime').innerText = min;
             }, null, {enableHighAccuracy: true});
         } else {
-            saveRecord();
+            saveRecord(startPos, lastPos);
             navigator.geolocation.clearWatch(watchId);
-            if (wakeLock) wakeLock.release(); // 停止後恢復正常省電
-            location.reload();
+            if (wakeLock) wakeLock.release();
+            setTimeout(() => { location.reload(); }, 500);
         }
     }
 
-    function saveRecord() {
-        let record = {
-            time: new Date().toLocaleString(),
-            dist: document.getElementById('dispDist').innerText,
-            amount: document.getElementById('dispTotal').innerText
-        };
-        let history = JSON.parse(localStorage.getItem('taxiHistory') || '[]');
+    function saveRecord(s, e) {
+        if(!s || !e) return;
+        let record = { id: Date.now(), time: new Date().toLocaleString(), dist: document.getElementById('dispDist').innerText, amount: document.getElementById('dispTotal').innerText, start: s, end: e };
+        let history = JSON.parse(localStorage.getItem('taxiHistoryFinal') || '[]');
         history.unshift(record);
-        localStorage.setItem('taxiHistory', JSON.stringify(history.slice(0, 10))); // 只留最近10筆
+        localStorage.setItem('taxiHistoryFinal', JSON.stringify(history.slice(0, 10)));
     }
 
     function displayHistory() {
-        let history = JSON.parse(localStorage.getItem('taxiHistory') || '[]');
+        let history = JSON.parse(localStorage.getItem('taxiHistoryFinal') || '[]');
         let list = document.getElementById('historyList');
-        if (history.length > 0) {
-            list.innerHTML = history.map(h => `
-                <div class="history-item">
-                    <span>${h.time}</span>
-                    <span>${h.dist}km</span>
-                    <span style="font-weight:bold; color:var(--apple-blue)">${h.amount}</span>
-                </div>
-            `).join('');
-        }
+        list.innerHTML = history.length ? history.map(h => `
+            <div class="history-item">
+                <div style="display:flex;justify-content:space-between;font-size:12px;color:#8E8E93"><span>${h.time}</span><span>${h.dist} km</span></div>
+                <div style="font-size:18px; font-weight:bold; color:var(--apple-blue);margin:5px 0;">${h.amount}</div>
+                <div class="history-btn" onclick='showRoute(${JSON.stringify(h.start)}, ${JSON.stringify(h.end)})'>📍 查看起終點路線</div>
+            </div>
+        `).join('') : '<div style="text-align:center;color:#999;padding:20px;">尚無載客紀錄</div>';
+    }
+
+    function showRoute(s, e) {
+        historyLayer.clearLayers();
+        L.marker(s, {icon: L.divIcon({className:'', html:'<div style="background:var(--apple-green);width:12px;height:12px;border:2px solid white;border-radius:50%;box-shadow:0 0 5px rgba(0,0,0,0.3)"></div>'})}).addTo(historyLayer).bindPopup("起點").openPopup();
+        L.marker(e, {icon: L.divIcon({className:'', html:'<div style="background:var(--apple-red);width:12px;height:12px;border:2px solid white;border-radius:50%;box-shadow:0 0 5px rgba(0,0,0,0.3)"></div>'})}).addTo(historyLayer).bindPopup("終點");
+        let route = L.polyline([s, e], {color: '#555', weight: 3, dashArray: '5, 10'}).addTo(historyLayer);
+        map.fitBounds(route.getBounds(), {padding: [50, 50]});
+        window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 </script>
 </body>
 </html>
+
 

@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>全能計程車司機助手</title>
+    <style>
+        :root { --taxi-yellow: #FFD700; --taxi-dark: #333; }
+        body { font-family: sans-serif; background-color: #f0f0f0; margin: 0; padding-bottom: 50px; }
+        .nav { background: var(--taxi-dark); color: var(--taxi-yellow); padding: 15px; text-align: center; font-size: 20px; font-weight: bold; }
+        .container { padding: 15px; max-width: 600px; margin: auto; }
+        .card { background: white; padding: 20px; border-radius: 15px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        h2 { border-left: 5px solid var(--taxi-yellow); padding-left: 10px; font-size: 18px; margin-top: 0; }
+        
+        /* 輸入與設定 */
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        label { font-size: 12px; color: #666; }
+        input { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 8px; box-sizing: border-box; margin: 5px 0; }
+
+        /* 跳錶顯示 */
+        .meter-box { text-align: center; background: #222; color: #ff3b30; padding: 20px; border-radius: 10px; margin-bottom: 15px; }
+        .meter-amount { font-size: 50px; font-family: 'Courier New', monospace; font-weight: bold; }
+        .meter-stats { color: #aaa; font-size: 14px; }
+
+        /* 按鈕 */
+        .btn { width: 100%; padding: 15px; border: none; border-radius: 10px; font-weight: bold; font-size: 16px; cursor: pointer; margin-top: 10px; }
+        .btn-start { background: #4CAF50; color: white; }
+        .btn-stop { background: #f44336; color: white; display: none; }
+        .btn-calc { background: var(--taxi-yellow); color: var(--taxi-dark); }
+    </style>
+</head>
+<body>
+
+<div class="nav">🚕 全能計程車電腦</div>
+
+<div class="container">
+    <div class="card">
+        <h2>🚀 GPS 自動跳錶</h2>
+        <div class="meter-box">
+            <div class="meter-amount" id="gpsTotal">$80</div>
+            <div class="meter-stats">
+                距離: <span id="gpsDist">0.00</span> km | 
+                時間: <span id="gpsTime">0</span> min
+            </div>
+        </div>
+        <button class="btn btn-start" id="startBtn" onclick="toggleGPS(true)">開始載客 (啟動 GPS)</button>
+        <button class="btn btn-stop" id="stopBtn" onclick="toggleGPS(false)">到達目的地 (停止)</button>
+    </div>
+
+    <div class="card">
+        <h2>⚙️ 費率設定</h2>
+        <div class="grid">
+            <div><label>起跳價</label><input type="number" id="cfgBase" value="80"></div>
+            <div><label>每分鐘</label><input type="number" id="cfgMin" value="3"></div>
+            <div><label>20km內/km</label><input type="number" id="cfgRate1" value="15"></div>
+            <div><label>超過20km/km</label><input type="number" id="cfgRate2" value="25"></div>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>⚖️ 路徑比價 (A 高速 vs B 平路)</h2>
+        <div class="grid">
+            <div><label>A 里程</label><input type="number" id="distA" value="25"></div>
+            <div><label>A 分鐘</label><input type="number" id="timeA" value="15"></div>
+            <div><label>B 里程</label><input type="number" id="distB" value="15"></div>
+            <div><label>B 分鐘</label><input type="number" id="timeB" value="25"></div>
+        </div>
+        <button class="btn btn-calc" onclick="comparePaths()">計算路徑 A 與 B 的錢</button>
+        <div id="compareResult" style="margin-top:15px; text-align:center; font-weight:bold; color:#d9534f;"></div>
+    </div>
+</div>
+
+<script>
+    let watchId = null;
+    let totalDist = 0;
+    let startTime = null;
+    let lastPos = null;
+
+    // 通用的算錢邏輯
+    function getFare(d, t) {
+        const base = parseFloat(document.getElementById('cfgBase').value);
+        const r1 = parseFloat(document.getElementById('cfgRate1').value);
+        const r2 = parseFloat(document.getElementById('cfgRate2').value);
+        const tr = parseFloat(document.getElementById('cfgMin').value);
+        let dFee = (d <= 20) ? (d * r1) : (20 * r1 + (d - 20) * r2);
+        return Math.round(base + dFee + (t * tr));
+    }
+
+    // GPS 功能
+    function toggleGPS(start) {
+        const sBtn = document.getElementById('startBtn');
+        const eBtn = document.getElementById('stopBtn');
+        if (start) {
+            if (!navigator.geolocation) return alert("不支援 GPS");
+            totalDist = 0; startTime = new Date(); lastPos = null;
+            sBtn.style.display = 'none'; eBtn.style.display = 'block';
+            watchId = navigator.geolocation.watchPosition(pos => {
+                const cur = {lat: pos.coords.latitude, lng: pos.coords.longitude};
+                if (lastPos) {
+                    const d = calcDist(lastPos.lat, lastPos.lng, cur.lat, cur.lng);
+                    totalDist += d;
+                }
+                lastPos = cur;
+                let min = Math.floor((new Date() - startTime) / 60000);
+                document.getElementById('gpsTotal').innerText = "$" + getFare(totalDist, min);
+                document.getElementById('gpsDist').innerText = totalDist.toFixed(2);
+                document.getElementById('gpsTime').innerText = min;
+            }, null, {enableHighAccuracy: true});
+        } else {
+            navigator.geolocation.clearWatch(watchId);
+            sBtn.style.display = 'block'; eBtn.style.display = 'none';
+            alert("載客結束！最終車資： " + document.getElementById('gpsTotal').innerText);
+        }
+    }
+
+    function calcDist(lat1, lon1, lat2, lon2) {
+        const R = 6371;
+        const dLat = (lat2-lat1)*Math.PI/180;
+        const dLon = (lon2-lon1)*Math.PI/180;
+        const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
+        return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    }
+
+    // 比價功能
+    function comparePaths() {
+        const fA = getFare(parseFloat(document.getElementById('distA').value), parseFloat(document.getElementById('timeA').value));
+        const fB = getFare(parseFloat(document.getElementById('distB').value), parseFloat(document.getElementById('timeB').value));
+        document.getElementById('compareResult').innerHTML = `方案 A：$${fA} 元 <br> 方案 B：$${fB} 元`;
+    }
+</script>
+
+</body>
+</html>

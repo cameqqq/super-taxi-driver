@@ -2,132 +2,126 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>全能計程車司機助手</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Apple Style Taxi Meter Pro</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <style>
-        :root { --taxi-yellow: #FFD700; --taxi-dark: #333; }
-        body { font-family: sans-serif; background-color: #f0f0f0; margin: 0; padding-bottom: 50px; }
-        .nav { background: var(--taxi-dark); color: var(--taxi-yellow); padding: 15px; text-align: center; font-size: 20px; font-weight: bold; }
-        .container { padding: 15px; max-width: 600px; margin: auto; }
-        .card { background: white; padding: 20px; border-radius: 15px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); margin-bottom: 20px; }
-        h2 { border-left: 5px solid var(--taxi-yellow); padding-left: 10px; font-size: 18px; margin-top: 0; }
-        
-        /* 輸入與設定 */
-        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-        label { font-size: 12px; color: #666; }
-        input { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 8px; box-sizing: border-box; margin: 5px 0; }
-
-        /* 跳錶顯示 */
-        .meter-box { text-align: center; background: #222; color: #ff3b30; padding: 20px; border-radius: 10px; margin-bottom: 15px; }
-        .meter-amount { font-size: 50px; font-family: 'Courier New', monospace; font-weight: bold; }
-        .meter-stats { color: #aaa; font-size: 14px; }
-
-        /* 按鈕 */
-        .btn { width: 100%; padding: 15px; border: none; border-radius: 10px; font-weight: bold; font-size: 16px; cursor: pointer; margin-top: 10px; }
-        .btn-start { background: #4CAF50; color: white; }
-        .btn-stop { background: #f44336; color: white; display: none; }
-        .btn-calc { background: var(--taxi-yellow); color: var(--taxi-dark); }
+        :root { --apple-blue: #007AFF; --apple-bg: #F2F2F7; }
+        body { font-family: -apple-system, sans-serif; margin: 0; background: var(--apple-bg); display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+        #map { flex: 1; width: 100%; z-index: 1; }
+        .panel { position: relative; z-index: 10; background: rgba(255,255,255,0.9); backdrop-filter: blur(20px); border-top-left-radius: 20px; border-top-right-radius: 20px; padding: 15px; box-shadow: 0 -5px 15px rgba(0,0,0,0.05); max-height: 60vh; overflow-y: auto; }
+        .meter-box { background: white; padding: 15px; border-radius: 15px; text-align: center; margin-bottom: 10px; border: 1px solid rgba(0,0,0,0.05); }
+        .meter-amount { font-size: 40px; font-weight: 700; color: #000; }
+        .btn { width: 100%; padding: 14px; border: none; border-radius: 12px; font-weight: 600; font-size: 16px; cursor: pointer; margin-top: 10px; transition: 0.2s; }
+        .btn-start { background: var(--apple-blue); color: white; }
+        .btn-stop { background: #FF3B30; color: white; display: none; }
+        .history-card { background: white; padding: 10px; border-radius: 10px; margin-top: 10px; font-size: 13px; }
+        .history-item { border-bottom: 1px solid #eee; padding: 8px 0; display: flex; justify-content: space-between; }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+        .input-group { background: #E9E9EB; padding: 8px; border-radius: 8px; }
+        .input-group label { display: block; font-size: 10px; color: #8E8E93; }
+        input { width: 100%; border: none; background: transparent; font-size: 14px; font-weight: 500; outline: none; }
     </style>
 </head>
 <body>
 
-<div class="nav">🚕 全能計程車電腦</div>
+<div id="map"></div>
 
-<div class="container">
-    <div class="card">
-        <h2>🚀 GPS 自動跳錶</h2>
-        <div class="meter-box">
-            <div class="meter-amount" id="gpsTotal">$80</div>
-            <div class="meter-stats">
-                距離: <span id="gpsDist">0.00</span> km | 
-                時間: <span id="gpsTime">0</span> min
-            </div>
-        </div>
-        <button class="btn btn-start" id="startBtn" onclick="toggleGPS(true)">開始載客 (啟動 GPS)</button>
-        <button class="btn btn-stop" id="stopBtn" onclick="toggleGPS(false)">到達目的地 (停止)</button>
+<div class="panel">
+    <div class="meter-box">
+        <div class="meter-amount" id="dispTotal">$80</div>
+        <div style="font-size: 12px; color: #8E8E93;">距離 <span id="dispDist" style="color:#000">0.00</span> km | 時間 <span id="dispTime" style="color:#000">0</span> min</div>
+        <button class="btn btn-start" id="startBtn" onclick="toggleGPS(true)">🚕 開始載客</button>
+        <button class="btn btn-stop" id="stopBtn" onclick="toggleGPS(false)">🏁 到達目的地</button>
     </div>
 
-    <div class="card">
-        <h2>⚙️ 費率設定</h2>
-        <div class="grid">
-            <div><label>起跳價</label><input type="number" id="cfgBase" value="80"></div>
-            <div><label>每分鐘</label><input type="number" id="cfgMin" value="3"></div>
-            <div><label>20km內/km</label><input type="number" id="cfgRate1" value="15"></div>
-            <div><label>超過20km/km</label><input type="number" id="cfgRate2" value="25"></div>
-        </div>
+    <h2>⚙️ 費率設定</h2>
+    <div class="grid">
+        <div class="input-group"><label>起跳價</label><input type="number" id="cfgBase" value="80"></div>
+        <div class="input-group"><label>每分鐘</label><input type="number" id="cfgMin" value="3"></div>
     </div>
 
-    <div class="card">
-        <h2>⚖️ 路徑比價 (A 高速 vs B 平路)</h2>
-        <div class="grid">
-            <div><label>A 里程</label><input type="number" id="distA" value="25"></div>
-            <div><label>A 分鐘</label><input type="number" id="timeA" value="15"></div>
-            <div><label>B 里程</label><input type="number" id="distB" value="15"></div>
-            <div><label>B 分鐘</label><input type="number" id="timeB" value="25"></div>
-        </div>
-        <button class="btn btn-calc" onclick="comparePaths()">計算路徑 A 與 B 的錢</button>
-        <div id="compareResult" style="margin-top:15px; text-align:center; font-weight:bold; color:#d9534f;"></div>
+    <h2>📜 歷史紀錄</h2>
+    <div class="history-card" id="historyList">
+        <div style="color:#999; text-align:center;">尚無載客紀錄</div>
     </div>
 </div>
 
 <script>
-    let watchId = null;
-    let totalDist = 0;
-    let startTime = null;
-    let lastPos = null;
+    var map = L.map('map', { zoomControl: false }).setView([25.03, 121.56], 15);
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png').addTo(map);
+    var path = L.polyline([], {color: '#007AFF', weight: 6}).addTo(map);
+    var marker = L.circleMarker([25.03, 121.56], {radius: 8, color: 'white', fillColor: '#007AFF', fillOpacity: 1, weight: 3}).addTo(map);
 
-    // 通用的算錢邏輯
-    function getFare(d, t) {
-        const base = parseFloat(document.getElementById('cfgBase').value);
-        const r1 = parseFloat(document.getElementById('cfgRate1').value);
-        const r2 = parseFloat(document.getElementById('cfgRate2').value);
-        const tr = parseFloat(document.getElementById('cfgMin').value);
-        let dFee = (d <= 20) ? (d * r1) : (20 * r1 + (d - 20) * r2);
-        return Math.round(base + dFee + (t * tr));
+    var watchId = null, totalDist = 0, lastPos = null, startTime = null, wakeLock = null;
+
+    // 載入舊紀錄
+    window.onload = function() { displayHistory(); };
+
+    // 禁止螢幕休眠的魔法
+    async function requestWakeLock() {
+        try {
+            if ('wakeLock' in navigator) {
+                wakeLock = await navigator.wakeLock.request('screen');
+            }
+        } catch (err) { console.log("螢幕防休眠失效"); }
     }
 
-    // GPS 功能
+    function getFare(d, t) {
+        let base = parseFloat(document.getElementById('cfgBase').value);
+        let minRate = parseFloat(document.getElementById('cfgMin').value);
+        return Math.round(base + (d * 15) + (t * minRate));
+    }
+
     function toggleGPS(start) {
-        const sBtn = document.getElementById('startBtn');
-        const eBtn = document.getElementById('stopBtn');
         if (start) {
-            if (!navigator.geolocation) return alert("不支援 GPS");
-            totalDist = 0; startTime = new Date(); lastPos = null;
-            sBtn.style.display = 'none'; eBtn.style.display = 'block';
+            requestWakeLock(); // 啟動時不讓螢幕關掉
+            totalDist = 0; startTime = new Date(); lastPos = null; path.setLatLngs([]);
+            document.getElementById('startBtn').style.display = 'none';
+            document.getElementById('stopBtn').style.display = 'block';
             watchId = navigator.geolocation.watchPosition(pos => {
-                const cur = {lat: pos.coords.latitude, lng: pos.coords.longitude};
-                if (lastPos) {
-                    const d = calcDist(lastPos.lat, lastPos.lng, cur.lat, cur.lng);
-                    totalDist += d;
-                }
+                let cur = [pos.coords.latitude, pos.coords.longitude];
+                map.setView(cur, 17); marker.setLatLng(cur); path.addLatLng(cur);
+                if (lastPos) totalDist += map.distance(lastPos, cur) / 1000;
                 lastPos = cur;
                 let min = Math.floor((new Date() - startTime) / 60000);
-                document.getElementById('gpsTotal').innerText = "$" + getFare(totalDist, min);
-                document.getElementById('gpsDist').innerText = totalDist.toFixed(2);
-                document.getElementById('gpsTime').innerText = min;
+                document.getElementById('dispTotal').innerText = "$" + getFare(totalDist, min);
+                document.getElementById('dispDist').innerText = totalDist.toFixed(2);
+                document.getElementById('dispTime').innerText = min;
             }, null, {enableHighAccuracy: true});
         } else {
+            saveRecord();
             navigator.geolocation.clearWatch(watchId);
-            sBtn.style.display = 'block'; eBtn.style.display = 'none';
-            alert("載客結束！最終車資： " + document.getElementById('gpsTotal').innerText);
+            if (wakeLock) wakeLock.release(); // 停止後恢復正常省電
+            location.reload();
         }
     }
 
-    function calcDist(lat1, lon1, lat2, lon2) {
-        const R = 6371;
-        const dLat = (lat2-lat1)*Math.PI/180;
-        const dLon = (lon2-lon1)*Math.PI/180;
-        const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
-        return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    function saveRecord() {
+        let record = {
+            time: new Date().toLocaleString(),
+            dist: document.getElementById('dispDist').innerText,
+            amount: document.getElementById('dispTotal').innerText
+        };
+        let history = JSON.parse(localStorage.getItem('taxiHistory') || '[]');
+        history.unshift(record);
+        localStorage.setItem('taxiHistory', JSON.stringify(history.slice(0, 10))); // 只留最近10筆
     }
 
-    // 比價功能
-    function comparePaths() {
-        const fA = getFare(parseFloat(document.getElementById('distA').value), parseFloat(document.getElementById('timeA').value));
-        const fB = getFare(parseFloat(document.getElementById('distB').value), parseFloat(document.getElementById('timeB').value));
-        document.getElementById('compareResult').innerHTML = `方案 A：$${fA} 元 <br> 方案 B：$${fB} 元`;
+    function displayHistory() {
+        let history = JSON.parse(localStorage.getItem('taxiHistory') || '[]');
+        let list = document.getElementById('historyList');
+        if (history.length > 0) {
+            list.innerHTML = history.map(h => `
+                <div class="history-item">
+                    <span>${h.time}</span>
+                    <span>${h.dist}km</span>
+                    <span style="font-weight:bold; color:var(--apple-blue)">${h.amount}</span>
+                </div>
+            `).join('');
+        }
     }
 </script>
-
 </body>
 </html>
